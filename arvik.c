@@ -19,21 +19,21 @@
 #define OPTIONS "cxtvVf:h"
 #define BUF 2056
 
-typedef enum opt_enum {
-	ACTION_DEFAULT = 0,
-	ACTION_EXTRACT,
-	ACTION_CREATE,
-	ACTION_TOC,
-	ACTION_VALIDATE
-} opt_actions;
+//typedef enum opt_enum {
+//	ACTION_NONE = 0,
+//	ACTION_EXTRACT,
+//	ACTION_CREATE,
+//	ACTION_TOC,
+//	ACTION_VALIDATE
+//} opt_actions;
 
 //prototypes
-void help();
+void help_display(void);
 void create_archive(int argc, char * argv[]);
-void extract_archive();
-void toc_archive();
-void validate _archive();
-void bad_tag_exit();
+void extract_archive(void);
+void toc_archive(void);
+void validate_archive(void);
+void bad_tag_exit(void);
 
 int main(int argc, char *argv[]) {
 
@@ -45,37 +45,37 @@ int main(int argc, char *argv[]) {
 	int f_used = 0;
 	//char archive_filename[BUF];
 	char *archive_filename = NULL;
-	opt_actions curr_action = ACTION_DEFAULT;
+	var_action_t curr_action = ACTION_NONE;
 	int opt;
 
-	while((opt = getopt(argv, argv, OPTIONS)) != -1) {
+	while((opt = getopt(argc, argv, OPTIONS)) != -1) {
 
 		switch(opt) {
 			case 'x':
-				if(curr_action != ACTION_DEFAULT && curr_action != ACTION_EXTRACT) {
+				if(curr_action != ACTION_NONE && curr_action != ACTION_EXTRACT) {
 					fprintf(stderr, "Please enter a valid command line.\n");
 					exit(INVALID_CMD_OPTION);
 				}
 
-				action = ACTION_EXTRACT;
+				curr_action = ACTION_EXTRACT;
 				break;
 			case 'c':
-				if(curr_action != ACTION_DEFAULT && curr_action != ACTION_CREATE) {
+				if(curr_action != ACTION_NONE && curr_action != ACTION_CREATE) {
 					fprintf(stderr, "Please enter a valid command line.\n");
 					exit(INVALID_CMD_OPTION);
 				}
-				action = ACTION_CREATE;
+				curr_action = ACTION_CREATE;
 				break;
 			case 't':
-				if(curr_action != ACTION_DEFAULT && curr_action != ACTION_TOC) {
+				if(curr_action != ACTION_NONE && curr_action != ACTION_TOC) {
 					fprintf(stderr, "Please enter a valid command line.\n");
 					exit(INVALID_CMD_OPTION);
 				}
-				action = ACTION_TOC;
+				curr_action = ACTION_TOC;
 				break;
 			case 'f':
 				f_used = 1;
-				archive_filename = optarg
+				archive_filename = optarg;
 				break;
 			case 'h':
 				help = 1;
@@ -84,26 +84,26 @@ int main(int argc, char *argv[]) {
 				verbose = 1;
 				break;
 			case 'V':
-				if(curr_action != ACTION_DEFAULT && curr_action != ACTION_VALIDATE) {
+				if(curr_action != ACTION_NONE && curr_action != ACTION_VALIDATE) {
 					fprintf(stderr, "Please enter a valid command line.\n");
 					exit(INVALID_CMD_OPTION);
 				}
-				action = ACTION_VALIDATE;
+				curr_action = ACTION_VALIDATE;
 				//validate_crc = 1;
 				break;
-			case default:
+			default:
 				fprintf(stderr, "Please enter a valid command line option.\n");
 				exit(INVALID_CMD_OPTION);
 				break;
 		}
 	}
 	
-	if(h == 1) {
-		help();
+	if(help == 1) {
+		help_display();
 	}
 
 	switch (curr_action) {
-		case ACTION_DEFAULT:
+		case ACTION_NONE:
 			fprintf(stderr, "No action specified\n");
 			exit(NO_ACTION_GIVEN);
 			break;
@@ -124,41 +124,46 @@ int main(int argc, char *argv[]) {
 			exit(INVALID_CMD_OPTION);
 			break;
 	}
-
+	//TODO
+	f_used++;
+	verbose++;
+	archive_filename++;
 
 	return EXIT_SUCCESS;
 }
 
 
 
-void help() {
+void help_display(void) {
 	fprintf(stderr, "Placeholder Help\n");
 	return;
 }
 
 void create_archive(int argc, char *argv[]) {
 	fprintf(stderr, "Placeholder create_archive\n");
+	argc++;
+	argv++;
 	return;
 }
-void extract_archive(){
+void extract_archive(void){
 
 	fprintf(stderr, "Placeholder extract_archive\n");
 	return;
 
 }
-void toc_archive(){
+void toc_archive(void){
 
 	fprintf(stderr, "Placeholder toc_archive\n");
 	return;
 
 }
-void validate _archive(){
+void validate_archive(void){
 
 	fprintf(stderr, "Placeholder validate_archive\n");
 	return;
 
 }
-void bad_tag_exit() {
+void bad_tag_exit(void) {
 
 	fprintf(stderr, "Placeholder bad_tag_exit\n");
 	return;
