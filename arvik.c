@@ -46,15 +46,15 @@ int main(int argc, char *argv[]) {
 			case 'x':
 				if(curr_action != ACTION_NONE && curr_action != ACTION_EXTRACT) {
 					fprintf(stderr, "Please enter a valid command line.\n");
-					exit(INVALID_CMD_OPTION);
+					//exit(INVALID_CMD_OPTION);
 				}
 				fprintf(stderr, "x option\n");
 				curr_action = ACTION_EXTRACT;
 				break;
 			case 'c':
-				if(curr_action != ACTION_NONE && curr_action != ACTION_CREATE) {
+				if(curr_action != ACTION_NONE /*&& curr_action != ACTION_CREATE*/) {
 					fprintf(stderr, "Please enter a valid command line.\n");
-					exit(INVALID_CMD_OPTION);
+					//exit(INVALID_CMD_OPTION);
 				}
 
 				fprintf(stderr, "c option\n");
@@ -63,15 +63,21 @@ int main(int argc, char *argv[]) {
 			case 't':
 				if(curr_action != ACTION_NONE && curr_action != ACTION_TOC) {
 					fprintf(stderr, "Please enter a valid command line.\n");
-					exit(INVALID_CMD_OPTION);
+					//exit(INVALID_CMD_OPTION);
 				}
 				fprintf(stderr, "t option\n");
 				curr_action = ACTION_TOC;
 				break;
 			case 'f':
+				if (optarg == NULL || strlen(optarg) == 0) {
+					fprintf(stderr, "-f requires a filename argument\n");
+					//exit(INVALID_CMD_OPTION);
+				}
 				fprintf(stderr, "f option\n");
 				f_used = 1;
-				archive_filename = optarg;
+				if(optarg != NULL){
+					archive_filename = optarg;
+				}
 				break;
 			case 'h':
 				fprintf(stderr, "h option\n");
@@ -84,7 +90,7 @@ int main(int argc, char *argv[]) {
 			case 'V':
 				if(curr_action != ACTION_NONE && curr_action != ACTION_VALIDATE) {
 					fprintf(stderr, "Please enter a valid command line.\n");
-					exit(INVALID_CMD_OPTION);
+					//exit(INVALID_CMD_OPTION);
 				}
 
 				fprintf(stderr, "V option\n");
@@ -98,6 +104,11 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	
+	//credit: stack overflow
+	for (int i = optind; i < argc; i++) {
+	    fprintf(stderr, "Non-option arg: %s\n", argv[i]);
+	}
+
 	if(help == 1) {
 		help_display();
 	}
@@ -111,6 +122,7 @@ int main(int argc, char *argv[]) {
 			extract_archive();
 			break;
 		case ACTION_CREATE:
+
 			create_archive(argc, argv);
 			break;
 		case ACTION_TOC:
@@ -124,10 +136,6 @@ int main(int argc, char *argv[]) {
 			exit(INVALID_CMD_OPTION);
 			break;
 	}
-	//TODO remove
-	f_used++;
-	verbose++;
-	archive_filename++;
 
 	return EXIT_SUCCESS;
 }
@@ -144,7 +152,6 @@ void help_display(void) {
 	fprintf(stdout, "	-V           Validate the crc value for the data\n");
 	fprintf(stdout, "	-v           verbose output\n");
 	fprintf(stdout, "	-h           show help text\n");
-
 	return;
 }
 
@@ -153,7 +160,6 @@ void create_archive(int argc, char *argv[]) {
 	int archive_fd;
 	int use_stdout = 0;
 	int i;
-	//mode_t old_umask;
 	fprintf(stderr, "Placeholder create_archive\n");
 
 	//open archive file
@@ -188,6 +194,7 @@ void create_archive(int argc, char *argv[]) {
 	//process each file on cmd line
 	
 	for(i = optind; i < argc; i++) {
+		
 		char *filename = argv[i];
 		int input_fd;
 		struct stat sb;
@@ -196,12 +203,15 @@ void create_archive(int argc, char *argv[]) {
 		unsigned char buf[BUF];
 		ssize_t bytes_read, bytes_written;
 		ssize_t total_read = 0;
-		//size_t name_len = 0;
 		size_t copy_len = 0;	
 		//temp storage to work around snprintf truncate warnings
 		char temp_buf[32];
 		char crc_buf[11];
 		uLong crc = crc32(0L, Z_NULL, 0);
+
+		if(filename == NULL) {
+			fprintf(stderr, "NULL filename");
+		}
 
 		//opening input fie
 		input_fd = open(filename, O_RDONLY);
@@ -218,24 +228,12 @@ void create_archive(int argc, char *argv[]) {
 		}
 
 
-		//get header
-
-		//not working - warning from truncating null term
-		//strncpy(header.arvik_name, filename, sizeof(header.arvik_name) - 1);
-		//name_len = strlen(header.arvik_name);
-	//	if (header.arvik_name[name_len - 1] != ARVIK_NAME_TERM) {
-	//		if (name_len < sizeof(header.arvik_name) - 1) {
-	//			header.arvik_name[name_len] = ARVIK_NAME_TERM;
-	//			header.arvik_name[name_len + 1] = '\0';
-	//		}
-	//	}
-
+		//set header
 		//set mem to space
 		memset(&header, 32, sizeof(header));
 
 		//setting filename	
 		copy_len = MIN(strlen(filename), sizeof(header.arvik_name) - 2);
-			   //sizeof(header.arvik_name) - 1);
 		memcpy(header.arvik_name, filename, copy_len);
 
 		//could want protective if statement
@@ -258,16 +256,6 @@ void create_archive(int argc, char *argv[]) {
 		memcpy(header.arvik_size, temp_buf, strlen(temp_buf));	
 		//term
 		memcpy(header.arvik_term, ARVIK_TERM, sizeof(header.arvik_term));
-		
-		//copy in header
-		//memcpy(header.arvik_name, filename, strlen(filename));
-		//snprintf(header.arvik_date, sizeof(header.arvik_date), "-11%ld", sb.st_mtime);
-		//snprintf(header.arvik_uid, sizeof(header.arvik_uid), "-5%d", sb.st_uid);
-		//snprintf(header.arvik_gid, sizeof(header.arvik_gid), "%-5d", sb.st_gid);
-		//snprintf(header.arvik_mode, sizeof(header.arvik_mode), "%-7o", sb.st_mode & 07777);
-		//snprintf(header.arvik_size, sizeof(header.arvik_size), "%-9ld", sb.st_size);
-		////strncpy(header.arvik_term, ARVIK_TERM, sizeof(header.arvik_term));
-		//memcpy(header.arvik_term, ARVIK_TERM, sizeof(header.arvik_term));
 
 		//write header
 		if (write(archive_fd, &header, sizeof(header)) != sizeof(header)) {
@@ -307,15 +295,13 @@ void create_archive(int argc, char *argv[]) {
 		//write footer
 		memset(&footer, 32, sizeof(footer));
 		
-		//sprintf(footer.arvik_data_crc, "0x%08lx", crc);
+		//CRC
 		sprintf(crc_buf, "0x%08lx", crc);
 		memcpy(footer.arvik_data_crc, crc_buf, sizeof(footer.arvik_data_crc));
-		
-		//snprintf(footer.arvik_data_crc, sizeof(footer.arvik_data_crc), "0x%08lx", crc); //warning from truncating null
-		//strncpy(footer.arvik_term, ARVIK_TERM, sizeof(footer.arvik_term)); //warning for null term
-		
+		//terminator	
 		memcpy(footer.arvik_term, ARVIK_TERM, sizeof(footer.arvik_term));
 
+		//error for footer
 		if (write(archive_fd, &footer, sizeof(footer)) != sizeof(footer)) {
 			perror("writing footer");
 			close(input_fd);
@@ -323,7 +309,8 @@ void create_archive(int argc, char *argv[]) {
 		}
 
 		close(input_fd);
-
+		
+		//TODO
 		if(verbose) {
 			fprintf(stderr, "Added: %s\n", filename);
 		}
@@ -335,11 +322,138 @@ void create_archive(int argc, char *argv[]) {
 	}
 	return;
 }
+
 void extract_archive(void){
 
-	fprintf(stderr, "Placeholder extract_archive\n");
-	return;
+	int archive_fd;
+	arvik_header_t header;
+	arvik_footer_t footer;
+	char buf[BUF];
+	char temp_buf[11];
+	char filename[sizeof(header.arvik_name)];
+	ssize_t bytes_read, bytes_to_read;
+	uLong crc;
+//	char expected_crc[sizeof(footer.arvik_data_crc)];
+	char tag_buf[sizeof(ARVIK_TAG)];
+	int out_fd;
+	ssize_t remaining, chunk;
+	char pad;
+	char *slash;
+	//stat info
+	long size = 0;
+	//int uid = 0;
+	//int gid = 0;
+	int mode = 0;
+	time_t mtime = 0;
+	struct timespec times[2];
 
+	fprintf(stderr, "Placeholder extract_archive\n");
+	
+	if(archive_filename) {
+		archive_fd = open(archive_filename, O_RDONLY);
+		if (archive_fd < 0) {
+			perror("open archive file");
+			exit(EXTRACT_FAIL);
+		}
+	}
+	else {
+		archive_fd = STDIN_FILENO;
+	}
+	
+	//validate archive tag
+	bytes_read = read(archive_fd, tag_buf, strlen(ARVIK_TAG));
+	if(bytes_read != (ssize_t)strlen(ARVIK_TAG) || strncmp(tag_buf, ARVIK_TAG, strlen(ARVIK_TAG)) != 0) {
+		fprintf(stderr, "Invalid arvik tag\n");
+		exit(BAD_TAG);
+	}
+
+	//read members til EOF
+	while ((bytes_read = read(archive_fd, &header, sizeof(header))) == sizeof(header)) {
+		//extract filename to /
+		memset(filename, 0, sizeof(filename));
+		memcpy(filename, header.arvik_name, sizeof(header.arvik_name));
+		slash = strchr(filename, ARVIK_NAME_TERM);
+		if (slash) {
+			*slash = '\0';
+		}
+		
+		//parse metadata
+		size = strtol(header.arvik_size, NULL, 10);	
+	//	uid = strtol(header.arvik_uid, NULL, 10);	
+	//	gid = strtol(header.arvik_gid, NULL, 10);	
+		mode = strtol(header.arvik_mode, NULL, 8);	
+		mtime = strtol(header.arvik_date, NULL, 10);	
+
+		//create output file
+		out_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+		if(out_fd < 0) {
+			perror("Perror create output file");
+			exit(EXTRACT_FAIL);
+		}
+
+		//r/w file data
+		remaining = size;
+		crc = crc32(0L, Z_NULL, 0);
+		
+		while (remaining > 0) {
+			bytes_to_read = (remaining > BUF) ? BUF : remaining;
+			chunk = read(archive_fd, buf, bytes_to_read);
+			if(chunk <= 0) {
+				perror("reading file content");
+				close(out_fd);
+				exit(EXTRACT_FAIL);
+			}
+			crc = crc32(crc, (unsigned char *)buf, chunk);
+			remaining -= chunk;
+		}
+
+		if(size % 2 == 1) {
+			if (read(archive_fd, &pad, 1) != 1) {
+				perror("read padding byte");
+				close(out_fd);
+				exit(EXTRACT_FAIL);
+			}
+		}
+		
+		if(read(archive_fd, &footer, sizeof(footer)) != sizeof(footer)) {
+				fprintf(stderr, "Could not read footer\n");
+				close(out_fd);
+				exit(EXTRACT_FAIL);
+		}
+
+		sprintf(temp_buf, "0x%08lx", crc);
+		memcpy(footer.arvik_data_crc, temp_buf, strlen(temp_buf));
+		if(strncmp(temp_buf, footer.arvik_data_crc, sizeof(footer.arvik_data_crc)) != 0) {
+			fprintf(stderr, "Warning: CRC mismatch on %s\n", filename);
+			//TODO POSSIBLY WITH VALIDATION
+			exit(CRC_DATA_ERROR);
+		}
+
+		fchmod(out_fd, mode);
+		times[0].tv_sec = mtime;
+		times[0].tv_nsec = 0;
+		times[1].tv_sec = mtime;
+		times[1].tv_nsec = 0;
+		futimens(out_fd, times);
+
+		close(out_fd);
+
+
+		if(verbose) {
+			fprintf(stderr, "Extracted %s\n", filename);
+		}
+	}//end member read while
+
+	if(bytes_read != 0) {
+		fprintf(stderr, "Corrupt archive - truncated header\n");
+		exit(READ_FAIL);
+	}
+
+	if(archive_fd != STDIN_FILENO) {
+		close(archive_fd);
+	}
+
+	return;
 }
 void toc_archive(void){
 
