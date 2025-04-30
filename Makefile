@@ -22,10 +22,10 @@ all: ${TARGETS}
 .PHONY: clean tar
 
 $(COBJS): $(CSRCS)
-	$(CC) $(CFLAGS) -c $(@:.o=.c) -lz
+	$(CC) $(CFLAGS) -c $(@:.o=.c)
 
 $(TARGETS): $(COBJS)
-	$(CC) $(@).o -o $(@)
+	$(CC) $(@).o -o $(@) -lz
 
 clean:
 	rm -f $(COBJS) $(TARGETS) *~ *.txt *.diff *.ltoc *.stoc *.arv *.bin
