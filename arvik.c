@@ -15,6 +15,8 @@
 #include <errno.h>
 #include <time.h>
 #include <zlib.h>
+#include <pwd.h>
+#include <grp.h>
 
 //#define OPTIONS "cxtvVf:h"
 #define BUF 4096
@@ -467,10 +469,175 @@ void extract_archive(void){
 	return;
 }
 void toc_archive(void){
+	int archive_fd;
+	arvik_header_t header;
+	arvik_footer_t footer;
+	char tag_buf[sizeof(ARVIK_TAG)];
+	char filename[sizeof(header.arvik_name)];
+	ssize_t bytes_read;
+	long size;
+	int mode, uid, gid;
+	time_t mtime;
+	char mode_str[11];
+	struct tm *timeinfo;
+	char time_buf[64];
+	struct passwd *pw;
+	struct group *gr;
+	char temp[16];
+	ssize_t skip_bytes, chunk;
+	char pad;
+	char buf[BUF];
+	char *slash = NULL;
+	uLong crc;
+
 
 	fprintf(stderr, "Placeholder toc_archive\n");
-	return;
 
+	if(archive_filename != NULL) {
+		archive_fd = open(archive_filename, O_RDONLY);
+		if (archive_fd < 0) {
+			perror("open archive");
+			exit(TOC_FAIL);
+		}
+	}
+	else {
+		archive_fd = STDIN_FILENO;
+	}
+
+	bytes_read = read(archive_fd, tag_buf, strlen(ARVIK_TAG));
+	if (bytes_read != (ssize_t)strlen(ARVIK_TAG) || strncmp(tag_buf, ARVIK_TAG, strlen(ARVIK_TAG)) != 0) {
+		perror("Invalid Arvik tag");
+		exit(BAD_TAG);
+	}
+
+	//grab header loop
+	while ((bytes_read = read(archive_fd, &header, sizeof(header))) == sizeof(header)) {
+	
+		//grab filename
+		memset(filename, 0, sizeof(filename));
+		memcpy(filename, header.arvik_name, sizeof(header.arvik_name));
+		filename[sizeof(header.arvik_name) - 1] = '\0';
+		slash = strchr(filename, ARVIK_NAME_TERM);
+		if (slash) {
+			*slash = '\0';
+		}
+		
+		//concerned about not resetting temp buffer properly
+		memset(temp, 0, sizeof(temp));
+		//metadata
+		memcpy(temp, header.arvik_size, sizeof(header.arvik_size));
+		temp[sizeof(header.arvik_size)] = '\0';
+		size = strtol(temp, NULL, 10);
+
+		memset(temp, 0, sizeof(temp));
+		memcpy(temp, header.arvik_uid, sizeof(header.arvik_uid));
+		temp[sizeof(header.arvik_uid)] = '\0';
+		uid = strtol(temp, NULL, 10);
+		
+		memset(temp, 0, sizeof(temp));
+		memcpy(temp, header.arvik_gid, sizeof(header.arvik_gid));
+		temp[sizeof(header.arvik_gid)] = '\0';
+		gid = strtol(temp, NULL, 10);
+		
+		memset(temp, 0, sizeof(temp));
+		memcpy(temp, header.arvik_mode, sizeof(header.arvik_mode));
+		temp[sizeof(header.arvik_mode)] = '\0';
+		mode = strtol(temp, NULL, 8);
+		
+		memset(temp, 0, sizeof(temp));
+		memcpy(temp, header.arvik_date, sizeof(header.arvik_date));
+		temp[sizeof(header.arvik_date)] = '\0';
+		mtime = strtol(temp, NULL, 10);
+
+		//mode to string
+		//credit: stack overflow
+		//does not work with directories
+		//mode_str[0] = (S_ISDIR(mode)) ? 'd' : '-';
+		mode_str[0] = (mode & 0400) ? 'r' : '-';
+		mode_str[1] = (mode & 0200) ? 'w' : '-';
+		mode_str[2] = (mode & 0100) ? 'x' : '-';
+		mode_str[3] = (mode & 0040) ? 'r' : '-';
+		mode_str[4] = (mode & 0020) ? 'w' : '-';
+		mode_str[5] = (mode & 0010) ? 'x' : '-';
+		mode_str[6] = (mode & 0004) ? 'r' : '-';
+		mode_str[7] = (mode & 0002) ? 'w' : '-';
+		mode_str[8] = (mode & 0001) ? 'x' : '-';
+		mode_str[9] = '\0';
+
+		if(!verbose) {
+			fprintf(stdout, "%s\n", filename);
+		}
+		else {
+			pw = getpwuid(uid);
+			gr = getgrgid(gid);
+
+			//format for time
+			timeinfo = localtime(&mtime);
+			strftime(time_buf, sizeof(time_buf), "%b %e %R %Y", timeinfo);
+
+			//full verbose output
+			fprintf(stdout, "file name: %s\n", filename);
+
+			fprintf(stdout, "%-16s", "    mode:");
+			fprintf(stdout, "%9s\n", mode_str);
+
+			fprintf(stdout, "%-16s", "    uid:");
+			fprintf(stdout, "%9d  %s\n", uid, pw ? pw->pw_name : "unknown");
+
+			fprintf(stdout, "%-16s", "    gid:");
+			fprintf(stdout, "%9d  %s\n", gid, gr ? gr->gr_name : "unknown");
+			
+			fprintf(stdout, "%-16s", "    size:");
+			fprintf(stdout, "%9ld bytes\n", size);
+
+			fprintf(stdout, "%-16s", "    mtime:");
+			fprintf(stdout, "%s\n", time_buf);
+		}
+		
+		//compute and display crc
+		crc = crc32(0L, Z_NULL, 0);
+		skip_bytes = size;
+		while (skip_bytes > 0) {
+		    chunk = (skip_bytes > BUF) ? BUF : skip_bytes;
+		    if (read(archive_fd, buf, chunk) != chunk) {
+			fprintf(stderr, "Failed to read file content for %s\n", filename);
+			exit(TOC_FAIL);
+		    }
+		    crc = crc32(crc, (unsigned char *)buf, chunk);
+		    skip_bytes -= chunk;
+		}
+
+		//read padding
+		if (size % 2 == 1) {
+			if (read(archive_fd, &pad, 1) != 1) {
+				perror("reading padding");
+				exit(TOC_FAIL);
+			}
+		}
+		
+		//read footer
+		if (read(archive_fd, &footer, sizeof(footer)) != sizeof(footer)) {
+			fprintf(stderr, "Failed to read footer\n");
+			exit(TOC_FAIL);
+		}
+
+		if(verbose) {
+			fprintf(stdout, "    data csc32: 0x%08lx\n", crc);
+		}
+
+	}//end toc file while
+	
+	//TODO check stderrs
+	if(bytes_read != 0) {
+		fprintf(stderr, "Corrupt archive (bad header)\n");
+		exit(BAD_TAG);
+	}
+
+	if (archive_fd != STDIN_FILENO) {
+		close(archive_fd);
+	}
+
+	return;
 }
 void validate_archive(void){
 
