@@ -74,8 +74,8 @@ int main(int argc, char *argv[]) {
 					//exit(INVALID_CMD_OPTION);
 				}
 				fprintf(stderr, "f option\n");
-				f_used = 1;
 				if(optarg != NULL){
+					f_used = 1;
 					archive_filename = optarg;
 				}
 				break;
@@ -393,8 +393,10 @@ void extract_archive(void){
 
 		//r/w file data
 		remaining = size;
+		fprintf(stderr, "remaining: %ld\n", remaining);
 		crc = crc32(0L, Z_NULL, 0);
-		
+	
+		//read loop
 		while (remaining > 0) {
 			bytes_to_read = (remaining > BUF) ? BUF : remaining;
 			chunk = read(archive_fd, buf, bytes_to_read);
@@ -403,6 +405,15 @@ void extract_archive(void){
 				close(out_fd);
 				exit(EXTRACT_FAIL);
 			}
+
+			//write to file
+			if (write(out_fd, buf, chunk) != chunk) {
+				perror("writing to file");
+				close(out_fd);
+				exit(EXTRACT_FAIL);
+			}
+
+
 			crc = crc32(crc, (unsigned char *)buf, chunk);
 			remaining -= chunk;
 		}
