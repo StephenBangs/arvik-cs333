@@ -169,7 +169,7 @@ void create_archive(int argc, char *argv[]) {
 		archive_fd = open(archive_filename, O_WRONLY | O_CREAT | O_TRUNC, 0664);
 		if(archive_fd < 0) {
 			perror("open");
-			exit(CREATE_FAIL);
+			exit(READ_FAIL);
 		}
 
 		//permission setting
@@ -182,7 +182,7 @@ void create_archive(int argc, char *argv[]) {
 	//ARVIK tag
 	if (write(archive_fd, ARVIK_TAG, strlen(ARVIK_TAG)) != (ssize_t)strlen(ARVIK_TAG)) {
 		perror("write tag");
-		exit(CREATE_FAIL);
+		exit(BAD_TAG);
 	}
 
 	//if no member files given, exit after writing tag
@@ -219,14 +219,14 @@ void create_archive(int argc, char *argv[]) {
 		input_fd = open(filename, O_RDONLY);
 		if (input_fd < 0) {
 			perror("open input file");
-			exit(CREATE_FAIL);
+			exit(READ_FAIL);
 		}
 
 		//get metadata
 		if (fstat(input_fd, &sb) < 0) {
 			perror("fstat");
 			close(input_fd);
-			exit(CREATE_FAIL);
+			exit(READ_FAIL);
 		}
 
 
@@ -272,7 +272,7 @@ void create_archive(int argc, char *argv[]) {
 			if(bytes_written != bytes_read) {
 				perror("Inequal bytes written and read");
 				close(input_fd);
-				exit(CREATE_FAIL);
+				exit(READ_FAIL);
 			}
 			crc = crc32(crc, buf, bytes_read);
 			total_read += bytes_read;
@@ -497,7 +497,7 @@ void toc_archive(void){
 		archive_fd = open(archive_filename, O_RDONLY);
 		if (archive_fd < 0) {
 			perror("open archive");
-			exit(TOC_FAIL);
+			exit(READ_FAIL);
 		}
 	}
 	else {
@@ -641,14 +641,116 @@ void toc_archive(void){
 }
 void validate_archive(void){
 
+	int archive_fd;
+	arvik_header_t header;
+	arvik_footer_t footer;
+	char tag_buf[sizeof(ARVIK_TAG)];
+	char filename[sizeof(header.arvik_name)];
+	long size;
+	char temp[16];
+	ssize_t bytes_read, chunk;
+	char pad;
+	char buf[BUF];
+	char *slash = NULL;
+	ssize_t remaining;
+	char expected_crc[sizeof(footer.arvik_data_crc) +1 ];
+	char actual_crc[sizeof(footer.arvik_data_crc) + 1];
+	uLong crc;
+
 	fprintf(stderr, "Placeholder validate_archive\n");
+
+	if (archive_filename != NULL) {
+
+		archive_fd = open(archive_filename, O_RDONLY);
+		if (archive_fd < 0) {
+			perror("open archive file");
+			exit(READ_FAIL);
+		}
+	}
+	else {
+		archive_fd = STDIN_FILENO;
+	}
+
+	//read and verify arvik
+	bytes_read = read(archive_fd, tag_buf, strlen(ARVIK_TAG));
+	fprintf(stderr, "\nbytes_read is: %ld\ntag_buf is: %s\n", bytes_read, tag_buf);
+	if (bytes_read != (ssize_t)strlen(ARVIK_TAG) || strncmp(tag_buf, ARVIK_TAG, strlen(ARVIK_TAG)) != 0) {
+		exit(BAD_TAG);
+	}
+	
+	//process archive members
+	while ((bytes_read = read(archive_fd, &header, sizeof(header))) == sizeof(header)) {
+	
+		// Get filename for error messages
+		memset(filename, 0, sizeof(filename));
+		memcpy(filename, header.arvik_name, sizeof(header.arvik_name));
+		slash = strchr(filename, ARVIK_NAME_TERM);
+		if (slash) *slash = '\0';
+		filename[sizeof(filename) - 1] = '\0';	
+
+		//parse file size
+		memcpy(temp, header.arvik_size, sizeof(header.arvik_size));
+		temp[sizeof(header.arvik_size)] = '\0';
+		size = strtol(temp, NULL, 10);
+
+		//CRC compute
+		crc = crc32(0L, Z_NULL, 0);
+		remaining = size;
+
+		while(remaining > 0) {
+			chunk = (remaining > BUF) ? BUF : remaining;
+			if (read(archive_fd, buf, chunk) != chunk) {
+				fprintf(stderr, "Error reading file data for %s\n", filename);
+				exit(READ_FAIL);
+			}
+			crc = crc32(crc, (unsigned char *)buf, chunk);
+			remaining -= chunk;
+		}
+
+		//skip padding if needed
+		if (size % 2 == 1) {
+			if (read(archive_fd, &pad, 1) != 1) {
+				exit(READ_FAIL);
+			}
+		}
+
+		//read footer
+		if (read(archive_fd, &footer, sizeof(footer)) != sizeof(footer)) {
+			fprintf(stderr, "Could not read footer for %s\n", filename);
+			exit(READ_FAIL);
+		}
+
+		//compare CRCs
+		snprintf(expected_crc, sizeof(expected_crc), "0x%08lx", crc);
+		memcpy(actual_crc, footer.arvik_data_crc, sizeof(footer.arvik_data_crc));
+		actual_crc[sizeof(footer.arvik_data_crc)] = '\0';
+
+		if (strncmp(expected_crc, actual_crc, sizeof(footer.arvik_data_crc)) != 0) {
+			fprintf(stderr, "CRC mismatch for %s\n", filename);
+			exit(CRC_DATA_ERROR);
+		}
+
+		if (verbose) {
+		    fprintf(stderr, "Validated %s (CRC OK)\n", filename);
+		}
+
+	}//end file while
+
+	if (bytes_read != 0) {
+		fprintf(stderr, "Corrupt archive with incomplete header\n");
+		exit(READ_FAIL);
+	}
+
+	if (archive_fd != STDIN_FILENO) {
+		close(archive_fd);
+	}
+
 	return;
 
 }
 void bad_tag_exit(void) {
 
-	fprintf(stderr, "Placeholder bad_tag_exit\n");
+	fprintf(stderr, "Invalid arvik archive tag.\n");
 	exit(BAD_TAG);
 	return;
-
 }
